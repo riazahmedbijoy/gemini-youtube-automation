@@ -23,13 +23,11 @@ BACKGROUND_MUSIC_PATH = ASSETS_PATH / "music/bg_music.mp3"
 FALLBACK_THUMBNAIL_FONT = ImageFont.load_default()
 YOUR_NAME = "Chaitanya"
 
-# Google's TTS endpoint throttles bursts from shared CI IPs.
 TTS_MAX_ATTEMPTS = 5
 TTS_BACKOFF_SECONDS = 5
 TTS_MIN_GAP_SECONDS = 2
 _last_tts_request = 0.0
 
-# GitHub Actions compatibility for ImageMagick
 if os.name == 'posix':
     change_settings({"IMAGEMAGICK_BINARY": "/usr/bin/convert"})
 
@@ -43,9 +41,7 @@ GEMINI_MODELS = [
     'gemini-1.5-pro'
 ]
 
-
 def get_pexels_image(query, video_type):
-    """Searches for a relevant image on Pexels and returns the image object."""
     pexels_api_key = os.getenv("PEXELS_API_KEY")
     if not pexels_api_key:
         print("⚠️ PEXELS_API_KEY not found. Using solid color background.")
@@ -69,18 +65,14 @@ def get_pexels_image(query, video_type):
         print(f"❌ General error fetching Pexels image for query '{query}': {e}")
     return None
 
-
 def _throttle_tts():
-    """Spaces out TTS requests so a burst doesn't trip Google's rate limiter."""
     global _last_tts_request
     elapsed = time.monotonic() - _last_tts_request
     if elapsed < TTS_MIN_GAP_SECONDS:
         time.sleep(TTS_MIN_GAP_SECONDS - elapsed)
     _last_tts_request = time.monotonic()
 
-
 def text_to_speech(text, output_path):
-    """Converts text to speech using gTTS and ensures clean audio using WAV format."""
     print(f"🎤 Converting script to speech...")
     temp_mp3_path = str(output_path).replace('.mp3', '_temp.mp3')
     wav_path = str(output_path.with_suffix('.wav'))
@@ -97,25 +89,19 @@ def text_to_speech(text, output_path):
             audio = AudioSegment.from_mp3(temp_mp3_path)
             audio.export(wav_path, format="wav", codec="pcm_s16le")
             os.remove(temp_mp3_path)
-
             print(f"✅ Speech generated and converted to WAV successfully!")
             return Path(wav_path)
-
         except Exception as e:
             if os.path.exists(temp_mp3_path):
                 os.remove(temp_mp3_path)
-
             if attempt == TTS_MAX_ATTEMPTS:
                 print(f"❌ ERROR: Failed to generate speech after {TTS_MAX_ATTEMPTS} attempts: {e}")
                 raise
-
             delay = TTS_BACKOFF_SECONDS * (2 ** (attempt - 1)) + random.uniform(0, 2)
             print(f"⚠️ TTS attempt {attempt}/{TTS_MAX_ATTEMPTS} failed ({e}). Retrying in {delay:.1f}s...")
             time.sleep(delay)
 
-
 def generate_curriculum(previous_titles=None):
-    """Generates the entire course curriculum using Gemini with automatic model fallback."""
     print("🤖 No content plan found. Generating a new curriculum from scratch...")
     client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
 
@@ -137,7 +123,6 @@ def generate_curriculum(previous_titles=None):
     Each lesson object must have these keys: "chapter", "part", "title", "status" (defaulted to "pending"), and "youtube_id" (defaulted to null).
     """
     
-    # অটোমেটিক মডেল ট্রাই লজিক
     response = None
     for model_name in GEMINI_MODELS:
         try:
@@ -147,7 +132,7 @@ def generate_curriculum(previous_titles=None):
             break
         except Exception as e:
             print(f"⚠️ Model {model_name} failed: {e}. Trying next model...")
-            time.sleep(2) # মডেল সুইচ করার আগে ২ সেকেন্ড অপেক্ষা
+            time.sleep(2)
             
     if not response:
         raise Exception("❌ CRITICAL ERROR: Failed to generate curriculum. All fallback models failed.")
@@ -161,9 +146,7 @@ def generate_curriculum(previous_titles=None):
         print(f"❌ ERROR parsing curriculum JSON: {e}")
         raise
 
-
 def generate_lesson_content(lesson_title):
-    """Generates the content for one long-form lesson with automatic model fallback."""
     print(f"🤖 Generating content for lesson: '{lesson_title}'...")
     client = genai.Client(api_key=os.environ["GOOGLE_API_KEY"])
     
@@ -175,12 +158,11 @@ def generate_lesson_content(lesson_title):
     Generate a JSON response with three keys:
     1. "long_form_slides": A list of 7 to 8 slide objects for a longer, more detailed main video. Each object needs a "title" and "content" key.
     2. "short_form_highlight": A single, punchy, 1-2 sentence summary for a YouTube Short.
-    3. "hashtags": A string of 5-7 relevant, space-separated hashtags for this lesson (e.g., "#GenerativeAI #LLM #Developer","#NeuralNetworks #BeginnerAI #AIforDevelopers").
+    3. "hashtags": A string of 5-7 relevant, space-separated hashtags for this lesson.
 
     Return only valid JSON.
     """
     
-    # অটোমেটিক মডেল ট্রাই লজিক
     response = None
     for model_name in GEMINI_MODELS:
         try:
@@ -204,12 +186,9 @@ def generate_lesson_content(lesson_title):
         print(f"❌ ERROR parsing lesson JSON: {e}")
         raise
 
-
 def generate_visuals(output_dir, video_type, slide_content=None, thumbnail_title=None, slide_number=0, total_slides=0):
-    """Generates a single professional, PPT-style slide or a thumbnail with corrected alignment."""
     output_dir.mkdir(exist_ok=True, parents=True)
     is_thumbnail = thumbnail_title is not None
-
     width, height = (1920, 1080) if video_type == 'long' else (1080, 1920)
     title = thumbnail_title if is_thumbnail else slide_content.get("title", "")
     bg_image = get_pexels_image(title, video_type)
@@ -223,11 +202,9 @@ def generate_visuals(output_dir, video_type, slide_content=None, thumbnail_title
     if is_thumbnail and video_type == 'long':
         w, h = final_bg.size
         if h > w:
-            print("⚠️ Detected vertical thumbnail for long video. Rotating and resizing to 1920x1080...")
             final_bg = final_bg.transpose(Image.ROTATE_270).resize((1920, 1080))
 
     draw = ImageDraw.Draw(final_bg)
-
     try:
         title_font = ImageFont.truetype(str(FONT_FILE), 80 if video_type == 'long' else 90)
         content_font = ImageFont.truetype(str(FONT_FILE), 45 if video_type == 'long' else 55)
@@ -236,11 +213,8 @@ def generate_visuals(output_dir, video_type, slide_content=None, thumbnail_title
         title_font = content_font = footer_font = FALLBACK_THUMBNAIL_FONT
 
     if not is_thumbnail:
-        # Header background
         header_height = int(height * 0.18)
         draw.rectangle([0, 0, width, header_height], fill=(25, 40, 65, 200))
-
-        # Wrap title text if needed
         words = title.split()
         title_lines = []
         current_line = ""
@@ -254,28 +228,23 @@ def generate_visuals(output_dir, video_type, slide_content=None, thumbnail_title
                 current_line = word
         title_lines.append(current_line)
 
-        # Center vertically in header
         line_height = title_font.getbbox("A")[3] + 10
         total_title_height = len(title_lines) * line_height
         y_text = (header_height - total_title_height) / 2
-
         for line in title_lines:
             bbox = draw.textbbox((0, 0), line, font=title_font)
             x = (width - (bbox[2] - bbox[0])) / 2
             draw.text((x, y_text), line, font=title_font, fill=(255, 255, 255))
             y_text += line_height
     else:
-        # Center title on thumbnail
         bbox = draw.textbbox((0, 0), title, font=title_font)
         x = (width - (bbox[2] - bbox[0])) / 2
         y = (height - (bbox[3] - bbox[1])) / 2
         draw.text((x, y), title, font=title_font, fill=(255, 255, 255), stroke_width=2, stroke_fill="black")
 
     if not is_thumbnail:
-        # Main content block
         content = slide_content.get("content", "")
         is_special_slide = len(content.split()) < 10
-
         words = content.split()
         lines = []
         current_line = ""
@@ -291,18 +260,15 @@ def generate_visuals(output_dir, video_type, slide_content=None, thumbnail_title
         line_height = content_font.getbbox("A")[3] + 15
         total_text_height = len(lines) * line_height
         y_text = (height - total_text_height) / 2 if is_special_slide else header_height + 100
-
         for line in lines:
             bbox = draw.textbbox((0, 0), line, font=content_font)
             x = (width - (bbox[2] - bbox[0])) / 2
             draw.text((x, y_text), line, font=content_font, fill=(230, 230, 230))
             y_text += line_height
 
-        # Footer
         footer_height = int(height * 0.06)
         draw.rectangle([0, height - footer_height, width, height], fill=(25, 40, 65, 200))
         draw.text((40, height - footer_height + 12), f"AI for Developers by {YOUR_NAME}", font=footer_font, fill=(180, 180, 180))
-
         if total_slides > 0:
             slide_num_text = f"Slide {slide_number} of {total_slides}"
             bbox = draw.textbbox((0, 0), slide_num_text, font=footer_font)
@@ -313,9 +279,7 @@ def generate_visuals(output_dir, video_type, slide_content=None, thumbnail_title
     final_bg.save(path)
     return str(path)
 
-
 def create_video(slide_paths, audio_paths, output_path, video_type):
-    """Creates a final video from slides and per-slide audio clips with optional background music."""
     print(f"🎬 Creating {video_type} video...")
     try:
         if not slide_paths or not audio_paths or len(slide_paths) != len(audio_paths):
@@ -324,7 +288,7 @@ def create_video(slide_paths, audio_paths, output_path, video_type):
         image_clips = []
         for i, (img_path, audio_path) in enumerate(zip(slide_paths, audio_paths)):
             audio_clip = AudioFileClip(str(audio_path))
-            duration = audio_clip.duration + 0.5  # Padding
+            duration = audio_clip.duration + 0.5
             img_clip = (
                 ImageClip(img_path)
                 .set_duration(duration)
@@ -337,7 +301,6 @@ def create_video(slide_paths, audio_paths, output_path, video_type):
         final_video = concatenate_videoclips(image_clips, method="compose")
 
         if BACKGROUND_MUSIC_PATH.exists():
-            print("🎵 Adding background music...")
             bg_music = AudioFileClip(str(BACKGROUND_MUSIC_PATH)).volumex(0.05)
             if bg_music.duration < final_video.duration:
                 bg_music = bg_music.fx(vfx.loop, duration=final_video.duration)
